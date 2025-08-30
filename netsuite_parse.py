@@ -96,12 +96,18 @@ def main():
   start = args.start if args.start is not None else 0
   end = args.end if args.end is not None else len(df1)
 
-  #extra cols for more info
-  additional_cols = ["Matched Account Name", "Name Match Score", "Needs Review", "Review Note"]
-  for c in additional_cols:
-    if c not in df1.columns:
-      df1[c] = pd.Series(pd.NA, index=df1.index, dtype="string")
-    
+  ns = df1.iloc[start:end].copy()#ensure deep copy is made for netsuite file range
+  ns["_rid"] = ns.index #for convenience and consistency when we explode tokens later
+
+  #tokenize names
+  ns["_name_tokens"] = ns[col1_name].apply(tokens)
+  df2["_aid"] = df2.index
+  df2["_name_tokens"] = df2[col2_name].apply(tokens)
+
+   
+
+  
+
 
     
 
