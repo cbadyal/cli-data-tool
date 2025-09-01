@@ -97,14 +97,62 @@ def main():
   end = args.end if args.end is not None else len(df1)
 
   ns = df1.iloc[start:end].copy()#ensure deep copy is made for netsuite file range
-  ns["_rid"] = ns.index #for convenience and consistency when we explode tokens later
+  ns["_rid"] = ns.index #for when we explode tokens later
 
   #tokenize names
   ns["_name_tokens"] = ns[col1_name].apply(tokens)
   df2["_aid"] = df2.index
   df2["_name_tokens"] = df2[col2_name].apply(tokens)
 
-   
+  #calculate token counts for union calc (ns = netsuite, ad = addresses)
+  ns_sizes = ns[["_rid", "_name_tokens"]].assign(ns_sz=lambda d: d["_name_tokens"].apply(len))
+  ad_sizes   = df2[["_aid","_name_tokens"]].assign(ad_sz=lambda d: d["_name_tokens"].apply(len))
+
+  #exploding tokens + simpler col name for merging on
+  ns_tok = (ns[["_rid","_name_tokens"]].explode("_name_tokens").dropna()
+                .rename(columns={"_name_tokens": "tok"}))
+  
+  ad_tok   = (df2[["_aid","_name_tokens"]].explode("_name_tokens").dropna()
+                .rename(columns={"_name_tokens": "tok"}))
+  
+  #candidates for a shared name (based on if they share tok(s))
+  cand = ns_tok.merge(ad_tok, on="tok", how="inner")[["_rid","_aid","tok"]]
+
+  #intersection for jaccard 
+  inter = (cand.drop_duplicates(["_rid","_aid","tok"])
+                  .groupby(["_rid","_aid"])["tok"].count()
+                  .reset_index(name="inter"))#reset index to "convert back" to df 
+  
+  #calculating jaccard
+  pairs = (inter.merge(ns_sizes[["_rid","ns_sz"]], on="_rid", how="left")
+             .merge(ad_sizes[["_aid","ad_sz"]], on="_aid", how="left"))
+  pairs["union"] = (pairs["ns_sz"] + pairs["ad_sz"] - pairs["inter"]).clip(lower=1)
+  pairs["score"] = pairs["inter"] / pairs["union"]
+
+  #only keeping _rid/_aid combinations with best score 
+  best_idx = pairs.groupby("_rid")["score"].idxmax()
+  best = pairs.loc[best_idx]
+  best = best[best["score"]>=args.threshold]
+
+  #merging to match addresses 
+  take_cols = [col2_name] + src_addr_cols
+  best = best.merge(df2[["_aid"] + take_cols], on="_aid", how="left")
+
+
+
+
+  
+
+
+
+
+
+
+  
+
+
+
+
 
   
 
