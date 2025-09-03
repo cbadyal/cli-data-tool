@@ -138,6 +138,39 @@ def main():
   take_cols = [col2_name] + src_addr_cols
   best = best.merge(df2[["_aid"] + take_cols], on="_aid", how="left")
 
+  #aligning rows to ns file and merging relevant best columns
+  out = ns[["_rid"]].merge(best[["_rid","_aid","score"] + take_cols],#dont rllly need aid since best already includes addresses
+        on="_rid", how="left"
+  )
+
+  #review columns
+  ns["Matched Account Name"] = out[col2_name].astype("string")
+  ns["Name Match Score"] = (out["score"].fillna(0)*100).round(1).astype("Float64")
+  ns["Needs Review"] = out["score"].isna().astype("boolean")
+  ns["Review Note"] = ns["Needs Review"].map({True: "Low overlap", False: "Matched"}).astype("string")
+
+  #copying addresses for matched rows if columns match
+  for dest in DEST_ADDR_COLS:
+        if dest in src_addr_cols and dest in out.columns:#TODO: src/dest addr col mappings
+            ns[dest] = out[dest].astype("string")
+
+  #denoting empty name 
+  empty_name = ns[col1_name].isna() | (ns[col1_name].astype(str).str.strip() == "")
+  ns.loc[empty_name, DEST_ADDR_COLS] = pd.NA
+  ns.loc[empty_name, "Matched Account Name"] = pd.NA
+  ns.loc[empty_name, "Name Match Score"] = 0.0
+  ns.loc[empty_name, "Needs Review"] = False
+  ns.loc[empty_name, "Review Note"] = "Missing name"
+
+  #putting processed slice back into df1 
+  df1.loc[ns.index, ns.columns] = ns
+  df1.to_excel(args.out, index=False)
+  print(f"Saved: {args.out}")
+  print(f"Processed rows [{start}:{end}) with threshold={args.threshold:.2f}")
+
+  if __name__ == "__main__":
+     main()
+
 
 
 
